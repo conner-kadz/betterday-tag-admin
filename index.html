@@ -551,7 +551,7 @@ function renderContent(){
               <div class="td-conn-name">${target?target.name:c.tid}</div>
               <div class="td-conn-desc">${tType?tType.name:''} · ${c.d}</div>
             </div>
-            <span class="td-conn-rel ${c.rel}">${c.rel}</span>
+            <button class="td-conn-view" onclick="event.stopPropagation();editConn('${tag.id}','${c.tid}')" title="Change relationship">Edit</button>
             <button class="td-conn-view" onclick="event.stopPropagation();navigateToTag('${c.tid}')">View →</button>
             <button class="td-conn-rm" onclick="event.stopPropagation();removeConn('${tag.id}','${c.tid}')" title="Remove connection">✕</button>
           </div>`;
@@ -593,6 +593,22 @@ function editTag(tagId){
   tag.name=newName.trim();
   renderContent();renderTypeList();
   gasPost({action:'update_tag',tagId,name:tag.name}).then(r=>console.log('Renamed:',r)).catch(e=>console.error(e));
+}
+
+function editConn(sourceId, targetId){
+  const tag=TAGS.find(t=>t.id===sourceId);
+  if(!tag) return;
+  const conn=tag.conns.find(c=>c.tid===targetId);
+  if(!conn) return;
+  const options=['blocks','triggers','linked','composed'];
+  const choice=prompt(`Change relationship type for this connection:\n\nCurrent: ${conn.rel}\n\nOptions: ${options.join(', ')}`, conn.rel);
+  if(!choice||!options.includes(choice)||choice===conn.rel) return;
+  // Remove old, add new
+  gasPost({action:'delete_connection',sourceTagId:sourceId,targetTagId:targetId}).catch(e=>console.error(e));
+  conn.rel=choice;
+  conn.d=choice;
+  gasPost({action:'add_connection',sourceTagId:sourceId,targetTagId:targetId,relationship:choice,description:choice}).catch(e=>console.error(e));
+  renderContent();
 }
 
 function removeConn(sourceId, targetId){
