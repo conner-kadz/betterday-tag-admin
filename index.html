@@ -91,6 +91,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-siz
 .tag-vis{width:6px;height:6px;border-radius:50%;flex-shrink:0}
 .tag-vis.visible{background:var(--green)}
 .tag-vis.hidden{background:var(--g300)}
+/* Inline toggle buttons for allergens */
+.tag-toggle-btn{font-size:8px;font-weight:700;padding:3px 8px;border-radius:4px;cursor:pointer;border:1px solid var(--g200);background:var(--g100);color:var(--g400);text-transform:uppercase;letter-spacing:.03em;transition:all .12s;flex-shrink:0;user-select:none}
+.tag-toggle-btn.on{background:#dc2626;color:white;border-color:#dc2626}
+.tag-toggle-btn.label{background:var(--g100);color:var(--g400)}
+.tag-toggle-btn.label.on{background:#0d9488;color:white;border-color:#0d9488}
 /* Expand chevron */
 .tag-chevron{font-size:10px;color:var(--g300);flex-shrink:0;transition:transform .15s;width:14px;text-align:center}
 .tag-row.expanded .tag-chevron{transform:rotate(90deg);color:var(--navy)}
@@ -289,6 +294,7 @@ async function loadFromSheet(){
       subtype:t.subtype||'',
       source:t.source||'ingredient',
       visible:t.clientVisible===true||t.clientVisible==='TRUE',
+      labelBold:t.labelBold===true||t.labelBold==='TRUE',
       ing:0, sub:0, dish:0, // counts will come from live data eventually
       conns:connMap[t.tagId]||[],
       rule:t.rule||''
@@ -474,7 +480,10 @@ function renderContent(){
           ).join(''):'<span class="tag-no-conn">—</span>'}
         </div>
         <span class="tag-source">${tag.source==='ingredient'?'Auto':tag.source==='dish'?'Manual':'Rule'}</span>
-        <span class="tag-vis ${tag.visible?'visible':'hidden'}" title="${tag.visible?'Client visible':'Internal only'}"></span>
+        ${activeType==='allergens'?`
+          <span class="tag-toggle-btn ${tag.visible?'on':''}" onclick="event.stopPropagation();toggleTagProp('${tag.id}','visible');${tag.id}" title="Client-facing filter">Client</span>
+          <span class="tag-toggle-btn label ${tag.labelBold?'on':''}" onclick="event.stopPropagation();toggleTagProp('${tag.id}','labelBold')" title="Bold on physical label">Label</span>
+        `:`<span class="tag-vis ${tag.visible?'visible':'hidden'}" title="${tag.visible?'Client visible':'Internal only'}"></span>`}
       </div>`;
 
       // Expanded detail — compact two-column layout
@@ -527,6 +536,18 @@ function renderContent(){
     });
   });
   body.innerHTML=html;
+}
+
+function toggleTagProp(tagId, prop){
+  const tag=TAGS.find(t=>t.id===tagId);
+  if(!tag) return;
+  tag[prop]=!tag[prop];
+  renderContent();
+  // Sync to sheet
+  const payload={action:'update_tag',tagId};
+  if(prop==='visible') payload.clientVisible=tag.visible;
+  if(prop==='labelBold') payload.labelBold=tag.labelBold;
+  gasPost(payload).then(r=>console.log('Updated:',r)).catch(e=>console.error(e));
 }
 
 function toggleExpand(id){
