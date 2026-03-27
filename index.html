@@ -107,7 +107,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-siz
 .tag-row.expanded .tag-chevron{transform:rotate(90deg);color:var(--navy)}
 
 /* ── Expanded detail (inline accordion) ── */
-.tag-detail{display:none;padding:8px 20px 12px 54px;background:var(--g50);border-bottom:1px solid var(--g200);border-top:1px solid var(--g200)}
+.tag-row.expanded{background:#e8e0f0;border-bottom-color:#d4c8e2}
+.tag-detail{display:none;padding:8px 20px 12px 54px;background:#f3eff8;border-bottom:1px solid #d4c8e2}
 .tag-detail.open{display:block}
 .td-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px}
 .td-section{margin-bottom:8px}
@@ -545,14 +546,15 @@ function renderContent(){
         tag.conns.forEach(c=>{
           const target=TAGS.find(x=>x.id===c.tid);
           const tType=target?TAG_TYPES.find(x=>x.id===target.type):null;
+          const cIdx=tag.conns.indexOf(c);
           html+=`<div class="td-conn-item">
             <span class="td-conn-icon">${c.rel==='blocks'?'⛔':c.rel==='triggers'?'⚡':c.rel==='linked'?'🔗':'🧩'}</span>
             <div class="td-conn-info">
               <div class="td-conn-name">${target?target.name:c.tid}</div>
               <div class="td-conn-desc">${tType?tType.name:''} · ${c.d}</div>
             </div>
-            <button class="td-conn-view" onclick="event.stopPropagation();editConn('${tag.id}','${c.tid}')" title="Change relationship">Edit</button>
-            <button class="td-conn-view" onclick="event.stopPropagation();navigateToTag('${c.tid}')">View →</button>
+            <button class="td-conn-view" onclick="event.stopPropagation();openEditConn('${tag.id}',${cIdx})" title="Edit connection">Edit</button>
+            <button class="td-conn-view" onclick="event.stopPropagation();navigateToTag('${c.tid}')">Go to ${target?target.name:c.tid}</button>
             <button class="td-conn-rm" onclick="event.stopPropagation();removeConn('${tag.id}','${c.tid}')" title="Remove connection">✕</button>
           </div>`;
         });
@@ -595,21 +597,30 @@ function editTag(tagId){
   gasPost({action:'update_tag',tagId,name:tag.name}).then(r=>console.log('Renamed:',r)).catch(e=>console.error(e));
 }
 
-function editConn(sourceId, targetId){
+let editingConnSource=null;
+let editingConnIdx=null;
+
+function openEditConn(sourceId, connIdx){
   const tag=TAGS.find(t=>t.id===sourceId);
-  if(!tag) return;
-  const conn=tag.conns.find(c=>c.tid===targetId);
-  if(!conn) return;
-  const options=['blocks','triggers','linked','composed'];
-  const choice=prompt(`Change relationship type for this connection:\n\nCurrent: ${conn.rel}\n\nOptions: ${options.join(', ')}`, conn.rel);
-  if(!choice||!options.includes(choice)||choice===conn.rel) return;
-  // Remove old, add new
-  gasPost({action:'delete_connection',sourceTagId:sourceId,targetTagId:targetId}).catch(e=>console.error(e));
-  conn.rel=choice;
-  conn.d=choice;
-  gasPost({action:'add_connection',sourceTagId:sourceId,targetTagId:targetId,relationship:choice,description:choice}).catch(e=>console.error(e));
-  renderContent();
+  if(!tag||!tag.conns[connIdx]) return;
+  const c=tag.conns[connIdx];
+  editingConnSource=sourceId;
+  editingConnIdx=connIdx;
+  // Reuse the connection modal but pre-fill it
+  connSourceId=sourceId;
+  const target=TAGS.find(t=>t.id===c.tid);
+  document.getElementById('conn-source-name').textContent=tag.name+' → editing';
+  // Build target dropdown with current selected
+  const sel=document.getElementById('conn-target');
+  sel.innerHTML=TAGS.filter(t=>t.id!==sourceId).map(t=>`<option value="${t.id}" ${t.id===c.tid?'selected':''}>${t.emoji} ${t.name}</option>`).join('');
+  sel.value=c.tid;
+  document.getElementById('conn-rel').value=c.rel;
+  document.getElementById('conn-desc').value=c.d||'';
+  document.getElementById('conn-modal').classList.add('open');
 }
+
+// Override saveConnection to handle edits
+const _origSaveConn=typeof saveConnection==='function'?saveConnection:null;
 
 function removeConn(sourceId, targetId){
   const tag=TAGS.find(t=>t.id===sourceId);
@@ -675,6 +686,7 @@ function saveNewTag(){
 let connSourceId=null;
 
 function openConnModal(tagId){
+  editingConnSource=null;editingConnIdx=null; // reset edit mode
   connSourceId=tagId;
   const tag=TAGS.find(t=>t.id===tagId);
   document.getElementById('conn-source-name').textContent=tag?tag.name:'';
@@ -694,6 +706,7 @@ function openConnModal(tagId){
 function closeConnModal(){
   document.getElementById('conn-modal').classList.remove('open');
   connSourceId=null;
+  editingConnSource=null;editingConnIdx=null;
 }
 
 function saveConnection(){
@@ -704,11 +717,23 @@ function saveConnection(){
   if(!targetId||!rel) return;
   const tag=TAGS.find(t=>t.id===connSourceId);
   if(!tag) return;
-  tag.conns.push({tid:targetId,rel,d:desc});
+
+  if(editingConnIdx!==null && editingConnSource){
+    // Edit mode — remove old connection, add updated one
+    const oldConn=tag.conns[editingConnIdx];
+    if(oldConn){
+      gasPost({action:'delete_connection',sourceTagId:connSourceId,targetTagId:oldConn.tid}).catch(e=>console.error(e));
+    }
+    tag.conns[editingConnIdx]={tid:targetId,rel,d:desc};
+    editingConnSource=null;editingConnIdx=null;
+  } else {
+    // New connection
+    tag.conns.push({tid:targetId,rel,d:desc});
+  }
+
   closeConnModal();
   renderContent();
-  // Sync to sheet
-  gasAddConnection(connSourceId,targetId,rel,desc).then(r=>console.log('Connection added:',r)).catch(e=>console.error(e));
+  gasAddConnection(connSourceId,targetId,rel,desc).then(r=>console.log('Connection saved:',r)).catch(e=>console.error(e));
 }
 
 // Init — load from Google Sheet
