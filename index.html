@@ -84,10 +84,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-siz
 /* Connection pills inline */
 .tag-conns{display:flex;gap:4px;flex:1;flex-wrap:wrap;min-width:0}
 .tag-conn-pill{font-size:8px;font-weight:600;padding:2px 7px;border-radius:10px;white-space:nowrap;display:flex;align-items:center;gap:3px}
-.tag-conn-pill.blocks{background:#ef4444;color:white}
-.tag-conn-pill.triggers{background:#22c55e;color:white}
-.tag-conn-pill.linked{background:#8b5cf6;color:white}
-.tag-conn-pill.composed{background:#3b82f6;color:white}
+.tag-conn-pill{background:var(--navy);color:white;font-size:8px;font-weight:500;padding:3px 9px;border-radius:5px;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;line-height:1.3}
+.tag-conn-pill .conn-emoji{font-size:10px}
+.tag-conn-pill .conn-action{opacity:.6;font-weight:400;text-transform:lowercase}
+.tag-conn-pill .conn-target{font-weight:700;color:#fbbf24}
+.tag-conn-pill .conn-cat{opacity:.5;font-size:7px}
+.tag-conn-pill.blocks,.tag-conn-pill.triggers,.tag-conn-pill.linked,.tag-conn-pill.composed{background:var(--navy)}
 .tag-conn-pill.rule{background:#fef3c7;color:#92400e}
 .tag-no-conn{font-size:9px;color:var(--g300);font-style:italic}
 /* Source indicator */
@@ -451,8 +453,11 @@ function selectType(id){
 function connLabel(c){
   const target=TAGS.find(x=>x.id===c.tid);
   if(!target) return c.tid;
-  const relWord=c.rel==='blocks'?'blocks':c.rel==='triggers'?'triggers':c.rel==='linked'?'→':c.rel==='composed'?'includes':'→';
-  return `${relWord} <strong>${target.name}</strong>`;
+  const tType=target?TAG_TYPES.find(x=>x.id===target.type):null;
+  const catIcon=tType?(TYPE_META[tType.id]||{}).icon||'🏷️':'🏷️';
+  const emoji=c.rel==='blocks'?'⛔':c.rel==='triggers'?'⚡':c.rel==='linked'?'🔗':c.rel==='composed'?'🧩':'→';
+  const action=c.rel==='blocks'?'blocks':c.rel==='triggers'?'triggers':c.rel==='linked'?'linked to':c.rel==='composed'?'includes':'→';
+  return `<span class="conn-emoji">${emoji}</span><span class="conn-action">${action}</span><span class="conn-target">${target.name}</span><span class="conn-cat">${catIcon}</span>`;
 }
 
 function renderContent(){
